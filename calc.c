@@ -123,17 +123,22 @@ static struct kobj_type calc_type = {
 	.sysfs_ops = &calc_ops,
 	.default_attrs = calc_attributes,
 };
-
+//Во внешнем представлении в каталоге /sys каждому объекту struct kobject соответствует каталог, что видно и из самого определения структуры
+//Но это вовсе не означает, что каждый инициализированный объект struct kobject автоматически экспортируется в файловую систему /sys. 
+//Для того, чтобы сделать объект видимым в /sys, необходимо вызвать: kobject_add
 struct kobject *calc_obj;
 static int __init sysfsexample_module_init(void)
 {
 	int err = -1;
+	//GFP_KERNE  Это обычный запрос, который может блокировать поток. Данный флаг используется при выделении памяти в контексте потока, который может заснуть.
 	calc_obj = kzalloc(sizeof(*calc_obj), GFP_KERNEL);
 	if (calc_obj) {
 		kobject_init(calc_obj, &calc_type);
 		if (kobject_add(calc_obj, NULL, "%s", PARENT_DIR)) {
 			 err = -1;
 			 printk("Sysfs creation failed\n");
+			 //вызов kobject_put () будет уменьшать 
+			 //счетчик ссылок и, возможно, освободить объект calc_obj
 			 kobject_put(calc_obj);
 			 calc_obj = NULL;
 		}
