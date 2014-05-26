@@ -5,15 +5,8 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 
-#ifdef SYSFS
-#include <linux/init.h>
-#include <linux/fs.h>
-#include <linux/slab.h>
-#else
-#include <linux/proc_fs.h>
-#endif
+#define WRITE_SIZE 100
 
-// names
 #define ARG1 "arg1"
 #define ARG2 "arg2"
 #define OPERATION "operation"
@@ -21,14 +14,9 @@
 
 #define PARENT_DIR "calc"
 
-
-#define WRITE_SIZE 100
-
 static char arg1_input[WRITE_SIZE];
 static char arg2_input[WRITE_SIZE];
 static char operation_input[WRITE_SIZE];
-
-
 
 long calculate(void) {
 	long a1 = 0;
@@ -38,7 +26,7 @@ long calculate(void) {
 	if (arg1_input[strlen(arg1_input) - 2] == '\n') {
 		arg1_input[strlen(arg1_input) - 2] = (char)0;
 	}
-
+	//string -> long
 	kstrtol(arg1_input, 10, &a1);
 	kstrtol(arg2_input, 10, &a2);
 
@@ -54,7 +42,12 @@ long calculate(void) {
 	return res;
 }
 
+
 #ifdef SYSFS
+
+#include <linux/init.h>
+#include <linux/fs.h>
+#include <linux/slab.h>
 
 static struct attribute arg1 = {
 	.name = ARG1,
@@ -162,11 +155,14 @@ MODULE_LICENSE("GPL");
 
 #else
 
+#include <linux/proc_fs.h>
+
 struct proc_dir_entry *calc_dir;
 struct proc_dir_entry *arg1;
 struct proc_dir_entry *arg2;
 struct proc_dir_entry *operation;
 struct proc_dir_entry *result;
+
 
 /*
  * arg1 write handler
@@ -174,9 +170,8 @@ struct proc_dir_entry *result;
 int write_arg1(struct file *file, const char *buf, unsigned long count, void *data)
 {
 	if(count > WRITE_SIZE) {
-		count = WRITE_SIZE;
+    		count = WRITE_SIZE;
 	}
-
 	memcpy(arg1_input, buf, count);
 	return count;
 }
@@ -187,9 +182,8 @@ int write_arg1(struct file *file, const char *buf, unsigned long count, void *da
 int write_arg2(struct file *file, const char *buf, unsigned long count, void *data)
 {
 	if(count > WRITE_SIZE) {
-		count = WRITE_SIZE;
+    		count = WRITE_SIZE;
 	}
-
 	memcpy(arg2_input, buf, count);
 	return count;
 }
@@ -200,9 +194,10 @@ int write_arg2(struct file *file, const char *buf, unsigned long count, void *da
 int write_operation(struct file *file, const char *buf, unsigned long count, void *data)
 {
 	if(count > WRITE_SIZE) {
-		count = WRITE_SIZE;
+    		count = WRITE_SIZE;
 	}
 
+	//memset(operation, 0, WRITE_SIZE);
 	memcpy(operation_input, buf, count);
 	return count;
 }
@@ -218,9 +213,11 @@ int read_result(char *buffer, char **buffer_location,
 	return sprintf(buffer, "%ld\n", res);
 }
 
+
 int init_module()
 {
 	// parent dir
+	//значение NULL если файл находится непосредственно в каталоге /proc
 	calc_dir = proc_mkdir(PARENT_DIR, NULL);
 	if(!calc_dir) {
 		printk(KERN_INFO "Error creating proc entry");
@@ -228,35 +225,40 @@ int init_module()
 	}
 
 	// arg1
+	// 0666 - права доступа для файлов
+	// 0666 - 0022 = 0644 (что соответствует правам -rw-r--r-- для file)
+	// С помощью команды create_proc_entry() в указанной выше поддиректории создается обычный файл "ARG1" с правами доступа 0666.
 	arg1 = create_proc_entry(ARG1, 0666, calc_dir);
 	if(!arg1) {
-		printk(KERN_INFO "Error creating proc entry");
-		return -ENOMEM;
-	}
+	    	printk(KERN_INFO "Error creating proc entry");
+	    	return -ENOMEM;
+    	}
+	//запись данных в виртуальный файл (из пользовательского пространства в ядро)
 	arg1->write_proc = write_arg1;
 
 	// arg2
 	arg2 = create_proc_entry(ARG2, 0666, calc_dir);
 	if(!arg2) {
-		printk(KERN_INFO "Error creating proc entry");
-		return -ENOMEM;
-	}
+	    	printk(KERN_INFO "Error creating proc entry");
+	    	return -ENOMEM;
+    	}
 	arg2->write_proc = write_arg2;
 
 	// operation
 	operation = create_proc_entry(OPERATION, 0666, calc_dir);
 	if(!operation) {
-		printk(KERN_INFO "Error creating proc entry");
-		return -ENOMEM;
-	}
+	    	printk(KERN_INFO "Error creating proc entry");
+	    	return -ENOMEM;
+    	}
 	operation->write_proc = write_operation;
 
 	// result
 	result = create_proc_entry(RESULT, 0666, calc_dir);
 	if(!result) {
-		printk(KERN_INFO "Error creating proc entry");
-		return -ENOMEM;
+	    	printk(KERN_INFO "Error creating proc entry");
+	    	return -ENOMEM;
 	}
+	//считывает данные из виртуального файла (из ядра в пользовательское пространство) 
 	result->read_proc = read_result;
 
 	printk(KERN_INFO "/proc/%s created\n", PARENT_DIR);
@@ -271,5 +273,4 @@ void cleanup_module()
 	remove_proc_entry(RESULT, NULL);
 	printk(KERN_INFO "/proc/%s removed\n", PARENT_DIR);
 }
-
 #endif
